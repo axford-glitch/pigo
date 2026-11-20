@@ -58,6 +58,13 @@ func realDeps() bridgeDeps {
 			svc.fetch = func(ctx context.Context, messageID, fileKey, kind string) ([]byte, string, error) {
 				return bot.DownloadResource(ctx, messageID, fileKey, kind)
 			}
+			svc.sendFile = func(ctx context.Context, chatID, path string) error {
+				_, err := bot.Send(ctx, feishuconnector.Outbound{
+					ChatID:      chatID,
+					Attachments: []feishuconnector.Attachment{{Path: path}},
+				})
+				return err
+			}
 			bot.OnMessage(func(ctx context.Context, msg feishuconnector.Message) {
 				reply := svc.Handle(ctx, msg)
 				if strings.TrimSpace(reply.Text) != "" {
@@ -135,7 +142,7 @@ func serve(ctx context.Context, opt Options, out, errOut io.Writer, d bridgeDeps
 		svc.runner = d.runner
 	} else {
 		svc.runner = func(ctx context.Context, prompt string, st Settings) (PromptResult, error) {
-			return runPrompt(ctx, opt, prompt, st)
+			return runPrompt(ctx, opt, prompt, st, svc.sendFile)
 		}
 	}
 	stopBot, err := d.startBot(ctx, bind.AppID, bind.AppSecret, svc)

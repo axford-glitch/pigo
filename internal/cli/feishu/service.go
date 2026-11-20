@@ -51,6 +51,7 @@ type Service struct {
 	bind     Binding
 	st       Settings
 	runner   PromptRunner
+	sendFile FileUpload
 	store    fileStore
 	bindPath string
 	cwd      string
@@ -119,7 +120,7 @@ func (s *Service) Handle(ctx context.Context, msg feishuconnector.Message) Reply
 	case cmdSend:
 		return s.sendLocal(arg)
 	default:
-		return Reply{Text: s.forward(ctx, arg)}
+		return Reply{Text: s.forward(ctx, msg.ChatID, arg)}
 	}
 }
 
@@ -203,7 +204,7 @@ func (s *Service) setModel(arg string) string {
 	return noteBind(SaveBinding(path, bind), "模型已设置为 "+model+"。下一条对话从新会话开始。")
 }
 
-func (s *Service) forward(ctx context.Context, prompt string) string {
+func (s *Service) forward(ctx context.Context, chatID, prompt string) string {
 	prompt = strings.TrimSpace(prompt)
 	if prompt == "" {
 		return helpText
@@ -217,7 +218,7 @@ func (s *Service) forward(ctx context.Context, prompt string) string {
 	defer s.busy.Store(false)
 
 	_, st := s.snapshot()
-	res, err := s.runner(ctx, prompt, st)
+	res, err := s.runner(withChatID(ctx, chatID), prompt, st)
 	if err != nil {
 		return "pigo 执行失败：" + err.Error()
 	}
@@ -272,7 +273,8 @@ const helpText = `飞书命令（请在私聊里发）：
 /base <url> 或 设置base <url> — 设置模型 API base 地址
 /key <key> 或 设置key <key> — 设置 API key（只保存在本机）
 /model <id> 或 设置模型 <id> — 设置模型 id
-/send <路径> 或 发送文件 <路径> — 把工作目录里的文件发回飞书
+直接说「把某文件发给我」— pigo 会调用工具把文件发到这个聊天
+/send <路径> 或 发送文件 <路径> — 手动把工作目录里的文件发回飞书
 直接发送文件或图片 — 保存到 feishu-inbox/
 状态 — 查看当前设置（不显示完整 key）
 其他文字 — 转发给 pigo，并把回答回传到这里`
