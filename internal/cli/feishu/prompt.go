@@ -33,6 +33,10 @@ type Options struct {
 	ConfigPath         string
 	CredPath           string
 	BindPath           string
+	// Cwd is the directory /send may read, and the parent of the default inbox.
+	Cwd string
+	// InboxDir receives files downloaded from Feishu. Empty uses <Cwd>/feishu-inbox.
+	InboxDir string
 }
 
 // runPrompt executes one headless pigo run and returns the final assistant

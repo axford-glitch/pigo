@@ -75,13 +75,9 @@ func (b *Bot) handleSDKMessage(ctx context.Context, event *larkim.P2MessageRecei
 		return
 	}
 	msg := event.Event.Message
-	if stringPtrValue(msg.MessageType) != "text" {
-		b.logger.Info("feishu message ignored", "reason", "non_text", "msg_type", stringPtrValue(msg.MessageType))
-		return
-	}
-	var content textContent
-	if err := json.Unmarshal([]byte(stringPtrValue(msg.Content)), &content); err != nil {
-		b.logger.Warn("feishu message ignored", "reason", "bad_content", "err", err)
+	text, file, notice := parseMessageContent(stringPtrValue(msg.MessageType), stringPtrValue(msg.Content))
+	if text == "" && file == nil && notice == "" {
+		b.logger.Warn("feishu message ignored", "reason", "bad_content", "msg_type", stringPtrValue(msg.MessageType))
 		return
 	}
 	chatType := ChatDM
@@ -104,7 +100,9 @@ func (b *Bot) handleSDKMessage(ctx context.Context, event *larkim.P2MessageRecei
 		ChatType:  chatType,
 		ChatID:    stringPtrValue(msg.ChatId),
 		UserID:    userID,
-		Text:      content.Text,
+		Text:      text,
+		File:      file,
+		Notice:    notice,
 		MessageID: stringPtrValue(msg.MessageId),
 		ThreadID:  stringPtrValue(msg.ThreadId),
 		Raw:       event,
@@ -279,13 +277,9 @@ func (b *Bot) handleWebhookEvent(ctx context.Context, eventID string, raw []byte
 		return
 	}
 	msg := evt.Event.Message
-	if msg.MessageType != "text" {
-		b.logger.Info("feishu message ignored", "reason", "non_text", "msg_type", msg.MessageType)
-		return
-	}
-	var content textContent
-	if err := json.Unmarshal([]byte(msg.Content), &content); err != nil {
-		b.logger.Warn("feishu message ignored", "reason", "bad_content", "err", err)
+	text, file, notice := parseMessageContent(msg.MessageType, msg.Content)
+	if text == "" && file == nil && notice == "" {
+		b.logger.Warn("feishu message ignored", "reason", "bad_content", "msg_type", msg.MessageType)
 		return
 	}
 	chatType := ChatDM
@@ -303,10 +297,54 @@ func (b *Bot) handleWebhookEvent(ctx context.Context, eventID string, raw []byte
 		ChatType:  chatType,
 		ChatID:    msg.ChatID,
 		UserID:    userID,
-		Text:      content.Text,
+		Text:      text,
+		File:      file,
+		Notice:    notice,
 		MessageID: msg.MessageID,
 		ThreadID:  msg.ThreadID,
 	})
+}
+
+// parseMessageContent classifies a Feishu message body. notice is set for a
+// type we intentionally do not transfer (stickers). ok-shaped results have
+// text, a file, or a notice; a parse failure returns all empty.
+func parseMessageContent(msgType, content string) (text string, file *InboundFile, notice string) {
+	switch msgType {
+	case "text", "":
+		var body textContent
+		if err := json.Unmarshal([]byte(content), &body); err != nil {
+			return "", nil, ""
+		}
+		return body.Text, nil, ""
+	case "image":
+		var body struct {
+			ImageKey string `json:"image_key"`
+		}
+		if err := json.Unmarshal([]byte(content), &body); err != nil || strings.TrimSpace(body.ImageKey) == "" {
+			return "", nil, ""
+		}
+		return "", &InboundFile{Key: strings.TrimSpace(body.ImageKey), Kind: "image"}, ""
+	case "file", "audio", "media":
+		var body struct {
+			FileKey  string `json:"file_key"`
+			FileName string `json:"file_name"`
+		}
+		if err := json.Unmarshal([]byte(content), &body); err != nil || strings.TrimSpace(body.FileKey) == "" {
+			return "", nil, ""
+		}
+		return "", &InboundFile{
+			Key:  strings.TrimSpace(body.FileKey),
+			Name: strings.TrimSpace(body.FileName),
+			Kind: "file",
+		}, ""
+	case "sticker":
+		return "", nil, "暂不支持表情包。"
+	default:
+		if msgType == "" {
+			return "", nil, ""
+		}
+		return "", nil, "暂不支持的飞书消息类型：" + msgType
+	}
 }
 
 func stringPtrValue(ptr *string) string {

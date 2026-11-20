@@ -58,17 +58,17 @@ func TestServiceCommandsAndForward(t *testing.T) {
 		return feishuconnector.Message{ChatType: feishuconnector.ChatDM, ChatID: "oc_1", UserID: user, Text: text}
 	}
 
-	if got := svc.Handle(context.Background(), feishuconnector.Message{ChatType: feishuconnector.ChatGroup, UserID: "ou_owner", Text: "/key sk-secret"}); !strings.Contains(got, "私聊") {
+	if got := svc.Handle(context.Background(), feishuconnector.Message{ChatType: feishuconnector.ChatGroup, UserID: "ou_owner", Text: "/key sk-secret"}); !strings.Contains(got.Text, "私聊") {
 		t.Fatalf("group reply = %q", got)
 	}
-	if got := svc.Handle(context.Background(), dm("ou_other", "你好")); !strings.Contains(got, "没有绑定") {
+	if got := svc.Handle(context.Background(), dm("ou_other", "你好")); !strings.Contains(got.Text, "没有绑定") {
 		t.Fatalf("other user reply = %q", got)
 	}
 	if len(prompts) != 0 {
 		t.Fatalf("runner called for rejected messages: %v", prompts)
 	}
 
-	baseReply := svc.Handle(context.Background(), dm("ou_owner", "设置base https://api.example.com/v1"))
+	baseReply := svc.Handle(context.Background(), dm("ou_owner", "设置base https://api.example.com/v1")).Text
 	if !strings.Contains(baseReply, "https://api.example.com/v1") || !strings.Contains(baseReply, "openai") {
 		t.Fatalf("base reply = %q", baseReply)
 	}
@@ -83,7 +83,7 @@ func TestServiceCommandsAndForward(t *testing.T) {
 		t.Fatalf("memory.enabled not preserved: %+v", cfg.Memory)
 	}
 
-	keyReply := svc.Handle(context.Background(), dm("ou_owner", "/key sk-live-1234"))
+	keyReply := svc.Handle(context.Background(), dm("ou_owner", "/key sk-live-1234")).Text
 	if strings.Contains(keyReply, "sk-live-1234") || !strings.Contains(keyReply, "1234") {
 		t.Fatalf("key reply leaked or dropped the mask: %q", keyReply)
 	}
@@ -106,7 +106,7 @@ func TestServiceCommandsAndForward(t *testing.T) {
 		t.Fatalf("cred mode = %v %v", perm, err)
 	}
 
-	chat := svc.Handle(context.Background(), dm("ou_owner", "@_user_1 总结 README"))
+	chat := svc.Handle(context.Background(), dm("ou_owner", "@_user_1 总结 README")).Text
 	if chat != "final answer" {
 		t.Fatalf("chat reply = %q", chat)
 	}
@@ -126,7 +126,7 @@ func TestServiceCommandsAndForward(t *testing.T) {
 	if second != "sess-1" {
 		t.Fatalf("second run session = %q, want sess-1", second)
 	}
-	status := svc.Handle(context.Background(), dm("ou_owner", "状态"))
+	status := svc.Handle(context.Background(), dm("ou_owner", "状态")).Text
 	if strings.Contains(status, "sk-live-1234") || !strings.Contains(status, "sess-1") {
 		t.Fatalf("status = %q", status)
 	}
@@ -146,9 +146,9 @@ func TestServiceBusy(t *testing.T) {
 	}
 	msg := feishuconnector.Message{ChatType: feishuconnector.ChatDM, UserID: "ou_owner", Text: "hello"}
 	done := make(chan string, 1)
-	go func() { done <- svc.Handle(context.Background(), msg) }()
+	go func() { done <- svc.Handle(context.Background(), msg).Text }()
 	<-started
-	busy := svc.Handle(context.Background(), msg)
+	busy := svc.Handle(context.Background(), msg).Text
 	if !strings.Contains(busy, "上一条") {
 		t.Fatalf("busy reply = %q", busy)
 	}

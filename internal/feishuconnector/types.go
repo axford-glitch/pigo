@@ -20,11 +20,25 @@ type Message struct {
 	MessageID string
 	ThreadID  string
 	Text      string
+	// File is set for image, file, audio, and media messages. Key is the
+	// Feishu resource key; Kind is the message-resource API type ("image" or
+	// "file"). The bytes are not downloaded yet.
+	File *InboundFile
+	// Notice is a user-visible reply that must not be forwarded to the agent
+	// (for example an unsupported message type).
+	Notice string
 	// OperatorID is set for card-action events: the authenticated actor who
 	// clicked the button. UserID stays routing-only in that case.
 	OperatorID string
 	// Raw is the underlying SDK event, exposed as an escape hatch.
 	Raw any
+}
+
+// InboundFile is a file or image attached to a Feishu message.
+type InboundFile struct {
+	Key  string
+	Name string
+	Kind string // "image" or "file"
 }
 
 // Handler is called for every inbound message/card-action. It runs on its
