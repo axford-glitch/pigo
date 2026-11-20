@@ -173,6 +173,8 @@ pigo -m ollama/qwen2.5-coder -u http://localhost:11434/v1 -p "解释 main.go 做
 | `--system-prompt` | | `""` | 用自定义系统提示词替换默认的 coding-assistant 提示词 |
 | `--append-system-prompt` | | `nil` | 向系统提示词末尾追加文本或文件内容；可重复 |
 | `--version` | `-v` | `false` | 打印版本信息并退出 |
+| `--feishu` | | `false` | 飞书扫码绑定后接收命令：设置模型 API base、设置 API key，或把对话转发给 pigo |
+| `--feishu-rebind` | | `false` | 配合 `--feishu`，忘掉已保存的飞书应用并重新扫码 |
 
 > `--subagent-rpc` 为内部参数（进程隔离子 Agent 的 JSON-RPC 服务端），不用于直接调用。
 
@@ -347,6 +349,24 @@ pigo --list-sessions              # 列出会话
 pigo --resume 20260720-1530-abcd  # 续跑指定会话（无头/REPL 均可）
 pigo --continue                   # 续跑最近一次会话
 ```
+
+### 飞书扫码绑定
+
+```bash
+pigo --feishu
+```
+
+终端会打印二维码。用飞书扫码后，pigo 通过长连接收这个账号的**私聊**（不需要公网回调地址）。私聊命令：
+
+| 发送 | 作用 |
+|------|------|
+| `/base https://api.example.com/v1` 或 `设置base https://api.example.com/v1` | 保存模型 API base 地址。还没指定协议时按 OpenAI 兼容协议 |
+| `/key sk-...` 或 `设置key sk-...` | 把 API key 写进本机 `0600` 凭据文件，配置里只留引用名 `feishu` |
+| `/model <id>` 或 `设置模型 <id>` | 设置模型 id |
+| `状态` | 查看当前设置（不回传完整 key） |
+| 其他文字 | 转发给 pigo，并把回答回传到飞书。同一会话会续聊 |
+
+群消息不会执行。绑定保存在 `$PIGO_HOME/feishu.json`（默认 `~/.pigo/feishu.json`）。`--feishu-rebind` 重新扫码。
 
 ### GitHub PR Review Webhook
 

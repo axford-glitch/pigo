@@ -16,6 +16,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -113,6 +114,39 @@ func LoadFileConfig(path string) (FileConfig, error) {
 		return FileConfig{}, fmt.Errorf("parse config %s: %w", path, err)
 	}
 	return cfg, nil
+}
+
+// UpdateFileConfig reads config.toml as a generic document, applies update, and
+// writes it back (mode 0600). A missing file starts from an empty document.
+// The rewrite drops comments; nested tables survive because they stay maps.
+// update must not keep the map after it returns.
+func UpdateFileConfig(path string, update func(doc map[string]any)) error {
+	if path == "" {
+		return fmt.Errorf("config path is empty")
+	}
+	doc := map[string]any{}
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read config %s: %w", path, err)
+	}
+	if len(bytes.TrimSpace(data)) > 0 {
+		if err := toml.Unmarshal(data, &doc); err != nil {
+			return fmt.Errorf("parse config %s: %w", path, err)
+		}
+	}
+	update(doc)
+	var buf bytes.Buffer
+	if err := toml.NewEncoder(&buf).Encode(doc); err != nil {
+		return fmt.Errorf("encode config %s: %w", path, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, buf.Bytes(), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // GenericBaseURLEnvVar derives the generic base-url override env var name for a

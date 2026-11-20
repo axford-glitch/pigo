@@ -135,6 +135,42 @@ func CredentialFilePath() string {
 	return filepath.Join(home, ".pigo", ".credentials.yaml")
 }
 
+// SaveCredential writes secret under name in the named-credential file, keeping
+// every other name already stored there. The file is created mode 0600 when
+// missing. An empty path, name, or secret is rejected so a caller cannot
+// accidentally persist a blank key.
+func SaveCredential(path, name, secret string) error {
+	name = strings.TrimSpace(name)
+	secret = strings.TrimSpace(secret)
+	if path == "" || name == "" || secret == "" {
+		return fmt.Errorf("credential path, name, and secret are required")
+	}
+	creds := map[string]string{}
+	existing, err := LoadCredentialFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err == nil {
+		creds = existing
+	}
+	creds[name] = secret
+	raw, err := yaml.Marshal(creds)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o600)
+}
+
 // ResolveCredentialReference loads the named-credential file and returns the
 // secret stored under name. Config files should carry the name only; the
 // literal secret exists here alone.

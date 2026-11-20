@@ -5,6 +5,7 @@
 //	pigo                                          # interactive REPL (on a TTY)
 //	pigo -p "read README and summarize"           # print mode: final text
 //	pigo -p "..." --output-format stream-json      # line-delimited JSON events
+//	pigo --feishu                                 # Feishu QR bind, then remote commands
 //	pigo install <pkg> | list | uninstall | update # package management
 //
 // The provider is resolved from --model against the built-in OpenAI-compatible
@@ -31,6 +32,7 @@ import (
 
 	"github.com/smallnest/pigo/internal/cli"
 	"github.com/smallnest/pigo/internal/cli/config"
+	"github.com/smallnest/pigo/internal/cli/feishu"
 	"github.com/smallnest/pigo/internal/cli/headless"
 	"github.com/smallnest/pigo/internal/cli/pkgcmd"
 	"github.com/smallnest/pigo/internal/cli/repl"
@@ -73,7 +75,12 @@ type cliOptions struct {
 	// GitHub review webhook mode (--github-review, issue #567): run an isolated
 	// webhook listener that turns PR ready-for-review events into read-only
 	// review sessions.
-	githubReview           bool
+	githubReview bool
+	// feishu runs the QR-binding Feishu bot. The scanning user can set the
+	// model API base URL, set the API key, or forward chat to pigo.
+	feishu bool
+	// feishuRebind forgets the saved Feishu app and shows a new QR code.
+	feishuRebind           bool
 	githubWebhookSecretEnv string
 	githubWebhookAddr      string
 	githubWebhookRepo      string
@@ -202,6 +209,8 @@ func main() {
 	flag.StringVarP(&opts.protocol, "protocol", "P", "", "force wire protocol for a custom endpoint: openai | anthropic (default: inferred from model id)")
 	flag.StringVar(&opts.provider, "provider", "", "select a built-in provider by name (e.g. deepseek, minimax); uses its default base URL, protocol, and API-key env var (see --help provider list)")
 	flag.BoolVar(&opts.githubReview, "github-review", false, "run the isolated GitHub ready-for-review webhook (issue #567): PR draft→ready creates a read-only review session and runs it")
+	flag.BoolVar(&opts.feishu, "feishu", false, "bind Feishu with a QR code, then accept private-chat commands: set the model API base URL, set the API key, or forward chat to pigo")
+	flag.BoolVar(&opts.feishuRebind, "feishu-rebind", false, "with --feishu, forget the saved Feishu app and scan a new QR code")
 	flag.StringVar(&opts.githubWebhookSecretEnv, "github-webhook-secret-env", "PIGO_GITHUB_WEBHOOK_SECRET", "name of the env var holding the high-entropy GitHub webhook secret (credential reference; never the secret itself)")
 	flag.StringVar(&opts.githubWebhookAddr, "github-webhook-addr", "127.0.0.1:3081", "listen address for the GitHub review webhook (put a TLS reverse proxy/tunnel in front; the endpoint is plain HTTP)")
 	flag.StringVar(&opts.githubWebhookRepo, "github-webhook-repo", "", "restrict review to this repository (owner/name); empty accepts any repo")
@@ -390,6 +399,27 @@ func dispatch(ctx context.Context, opts cliOptions, out, errOut io.Writer) int {
 	// the REPL/headless paths.
 	if opts.dream {
 		return runDream(ctx, opts, out, errOut)
+	}
+
+	// --feishu is a standalone long-running mode: QR-bind a Feishu bot and
+	// serve commands from the bound user. It shares nothing with the REPL.
+	if opts.feishu {
+		return feishu.Run(ctx, feishu.Options{
+			Model:              opts.model,
+			BaseURL:            opts.baseURL,
+			APIKey:             opts.apiKey,
+			Protocol:           opts.protocol,
+			Provider:           opts.provider,
+			ThinkingLevel:      opts.thinkingLevel,
+			SystemPrompt:       opts.systemPrompt,
+			AppendSystemPrompt: opts.appendSystemPrompt,
+			AllowedTools:       opts.allowedTools,
+			DisallowedTools:    opts.disallowedTools,
+			NoTools:            opts.noTools,
+			NoSkills:           opts.noSkills,
+			MemoryEnabled:      opts.memory.Memory.Enabled,
+			Rebind:             opts.feishuRebind,
+		}, out, errOut)
 	}
 
 	// --github-review is a standalone long-running mode: the isolated webhook
