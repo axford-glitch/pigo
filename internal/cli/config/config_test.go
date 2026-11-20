@@ -89,6 +89,40 @@ system_prompt = "be terse"
 	}
 }
 
+func TestUpdateFileConfigPreservesNestedTables(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "pigo", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "model = \"keep-me\"\napi_key = \"sk-old\"\n\n[memory]\nenabled = false\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := UpdateFileConfig(path, func(doc map[string]any) {
+		doc["base_url"] = "https://api.example.com/v1"
+		delete(doc, "api_key")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFileConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Model != "keep-me" || cfg.BaseURL != "https://api.example.com/v1" || cfg.APIKey != "" {
+		t.Fatalf("updated config = %+v", cfg)
+	}
+	if cfg.Memory.Enabled == nil || *cfg.Memory.Enabled {
+		t.Fatalf("memory table not preserved: %+v", cfg.Memory)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode = %o, want 600", info.Mode().Perm())
+	}
+}
+
 func TestLoadFileConfig_Malformed(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bad.toml")
 	if err := os.WriteFile(path, []byte("model = = ="), 0o600); err != nil {

@@ -71,6 +71,35 @@ func TestScrubEnv(t *testing.T) {
 	}
 }
 
+func TestSaveCredentialMergesAndRestrictsMode(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".credentials.yaml")
+	if err := os.WriteFile(path, []byte("other: sk-other\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveCredential(path, "feishu", "sk-new"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ResolveCredentialReference(path, "feishu")
+	if err != nil || got != "sk-new" {
+		t.Fatalf("feishu = (%q, %v)", got, err)
+	}
+	other, err := ResolveCredentialReference(path, "other")
+	if err != nil || other != "sk-other" {
+		t.Fatalf("other = (%q, %v)", other, err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode = %o, want 600", info.Mode().Perm())
+	}
+	if err := SaveCredential(path, "feishu", "  "); err == nil {
+		t.Fatal("blank secret was saved")
+	}
+}
+
 // TestCredentialFileRoundTrip covers LoadCredentialFile and
 // ResolveCredentialReference: found names, missing names, malformed YAML, and
 // the permission warning heuristic.
