@@ -37,6 +37,8 @@ type Options struct {
 	Cwd string
 	// InboxDir receives files downloaded from Feishu. Empty uses <Cwd>/feishu-inbox.
 	InboxDir string
+	// Listen is the loopback config API for LuCI. Empty disables it.
+	Listen string
 }
 
 // runPrompt executes one headless pigo run and returns the final assistant

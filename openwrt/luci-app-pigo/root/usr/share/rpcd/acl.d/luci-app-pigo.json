@@ -1,0 +1,21 @@
+{
+	"luci-app-pigo": {
+		"description": "Configure the pigo Feishu bot from LuCI",
+		"read": {
+			"ubus": {
+				"file": [ "exec" ]
+			},
+			"file": {
+				"/usr/bin/pigo": [ "exec" ]
+			}
+		},
+		"write": {
+			"ubus": {
+				"file": [ "exec" ]
+			},
+			"file": {
+				"/usr/bin/pigo": [ "exec" ]
+			}
+		}
+	}
+}

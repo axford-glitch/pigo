@@ -175,6 +175,7 @@ pigo -m ollama/qwen2.5-coder -u http://localhost:11434/v1 -p "解释 main.go 做
 | `--version` | `-v` | `false` | 打印版本信息并退出 |
 | `--feishu` | | `false` | 飞书扫码绑定后接收命令：设置模型 API base、设置 API key，或把对话转发给 pigo |
 | `--feishu-rebind` | | `false` | 配合 `--feishu`，忘掉已保存的飞书应用并重新扫码 |
+| `--feishu-listen` | | `127.0.0.1:8765` | 本机飞书配置接口，供 LuCI 扫码和填写 base / key / model |
 
 > `--subagent-rpc` 为内部参数（进程隔离子 Agent 的 JSON-RPC 服务端），不用于直接调用。
 
@@ -370,6 +371,8 @@ pigo --feishu
 | 其他文字 | 转发给 pigo，并把回答回传到飞书。同一会话会续聊 |
 
 群消息不会执行。飞书发来的文件和图片会下载到启动目录下的 `feishu-inbox/`。pigo 在对话里可以用 `feishu_send_file` 把工作目录中的文件直接发回飞书；`/send` 是同一条限制下的手动入口。工作目录外的路径和指向目录外的符号链接会被拒绝。绑定保存在 `$PIGO_HOME/feishu.json`（默认 `~/.pigo/feishu.json`）。`--feishu-rebind` 重新扫码。
+
+`pigo --feishu` 同时在 `127.0.0.1:8765` 提供配置接口（只接受本机连接）。OpenWrt 的 LuCI 包在 `openwrt/luci-app-pigo/`：把静态二进制装到 `/usr/bin/pigo`，把该目录放进 LuCI feed 后，服务页可以扫码绑定，并填写 API base、API key 和模型。页面通过 `pigo feishu-ctl` 访问本机接口，不会把 device code 或完整密钥回给浏览器。`--feishu-listen` 可以改端口，但不能改成非本机地址。
 
 ### GitHub PR Review Webhook
 

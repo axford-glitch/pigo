@@ -81,6 +81,7 @@ type cliOptions struct {
 	feishu bool
 	// feishuRebind forgets the saved Feishu app and shows a new QR code.
 	feishuRebind           bool
+	feishuListen           string
 	githubWebhookSecretEnv string
 	githubWebhookAddr      string
 	githubWebhookRepo      string
@@ -177,6 +178,10 @@ func main() {
 	// Session subcommands (pigo session export|list, issue #570) dispatch early
 	// like the package-management ones: they are standalone actions that never
 	// touch the interactive/headless flag surface.
+	if len(os.Args) > 1 && os.Args[1] == "feishu-ctl" {
+		os.Exit(feishu.Ctl(os.Args[2:], os.Stdout, os.Stderr))
+	}
+
 	if len(os.Args) > 1 && os.Args[1] == "session" {
 		if len(os.Args) < 3 {
 			fmt.Fprintln(os.Stderr, "usage: pigo session export <session-id> [flags] | pigo session list")
@@ -211,6 +216,7 @@ func main() {
 	flag.BoolVar(&opts.githubReview, "github-review", false, "run the isolated GitHub ready-for-review webhook (issue #567): PR draft→ready creates a read-only review session and runs it")
 	flag.BoolVar(&opts.feishu, "feishu", false, "bind Feishu with a QR code, then accept private-chat commands: set the model API base URL, set the API key, or forward chat to pigo")
 	flag.BoolVar(&opts.feishuRebind, "feishu-rebind", false, "with --feishu, forget the saved Feishu app and scan a new QR code")
+	flag.StringVar(&opts.feishuListen, "feishu-listen", feishu.DefaultListen, "loopback address for the LuCI Feishu setup API (127.0.0.1 or ::1 only)")
 	flag.StringVar(&opts.githubWebhookSecretEnv, "github-webhook-secret-env", "PIGO_GITHUB_WEBHOOK_SECRET", "name of the env var holding the high-entropy GitHub webhook secret (credential reference; never the secret itself)")
 	flag.StringVar(&opts.githubWebhookAddr, "github-webhook-addr", "127.0.0.1:3081", "listen address for the GitHub review webhook (put a TLS reverse proxy/tunnel in front; the endpoint is plain HTTP)")
 	flag.StringVar(&opts.githubWebhookRepo, "github-webhook-repo", "", "restrict review to this repository (owner/name); empty accepts any repo")
@@ -419,6 +425,7 @@ func dispatch(ctx context.Context, opts cliOptions, out, errOut io.Writer) int {
 			NoSkills:           opts.noSkills,
 			MemoryEnabled:      opts.memory.Memory.Enabled,
 			Rebind:             opts.feishuRebind,
+			Listen:             opts.feishuListen,
 		}, out, errOut)
 	}
 
