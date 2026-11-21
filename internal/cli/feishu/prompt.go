@@ -33,16 +33,21 @@ type Options struct {
 	ConfigPath         string
 	CredPath           string
 	BindPath           string
+	// Cwd is the directory /send may read, and the parent of the default inbox.
+	Cwd string
+	// InboxDir receives files downloaded from Feishu. Empty uses <Cwd>/feishu-inbox.
+	InboxDir string
 }
 
 // runPrompt executes one headless pigo run and returns the final assistant
 // text plus the session id carried on the first stream-json event, so the
 // next Feishu message can resume the same conversation.
-func runPrompt(ctx context.Context, opt Options, prompt string, st Settings) (PromptResult, error) {
+func runPrompt(ctx context.Context, opt Options, prompt string, st Settings, send FileUpload) (PromptResult, error) {
 	env, err := run.SetupEnv(st.Model, st.BaseURL, st.Protocol, st.Provider, st.APIKey, opt.NoTools, opt.NoSkills, opt.SystemPrompt, opt.AppendSystemPrompt, opt.MemoryEnabled, run.NewToolPolicy(opt.AllowedTools, opt.DisallowedTools))
 	if err != nil {
 		return PromptResult{}, err
 	}
+	attachSendTool(&env, opt, chatIDFrom(ctx), send)
 	if env.Plugins != nil {
 		defer env.Plugins.Close()
 	}

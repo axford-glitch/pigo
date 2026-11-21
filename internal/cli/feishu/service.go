@@ -35,14 +35,28 @@ type PromptResult struct {
 // real runner is runPrompt.
 type PromptRunner func(ctx context.Context, prompt string, st Settings) (PromptResult, error)
 
+// Reply is what the bot sends back. Files are local paths uploaded after Text.
+type Reply struct {
+	Text  string
+	Files []string
+}
+
+// ResourceFetch downloads one Feishu message resource. The string is a
+// filename from the response headers and may be empty.
+type ResourceFetch func(ctx context.Context, messageID, fileKey, kind string) ([]byte, string, error)
+
 // Service turns inbound Feishu messages into settings changes or a pigo run.
 // Only a direct message from the bound open_id is acted on.
 type Service struct {
 	bind     Binding
 	st       Settings
 	runner   PromptRunner
+	sendFile FileUpload
 	store    fileStore
 	bindPath string
+	cwd      string
+	inbox    string
+	fetch    ResourceFetch
 
 	mu   sync.Mutex
 	busy atomic.Bool
@@ -77,28 +91,36 @@ func (s *Service) allow(userID string) (bool, string) {
 
 // Handle replies to one inbound message. Group chats are refused so a key or
 // a workspace answer is not posted where other people can read it.
-func (s *Service) Handle(ctx context.Context, msg feishuconnector.Message) string {
+func (s *Service) Handle(ctx context.Context, msg feishuconnector.Message) Reply {
 	if msg.ChatType != feishuconnector.ChatDM {
-		return "请私聊我。群消息不会执行，避免把 API key 和仓库内容发到群里。"
+		return Reply{Text: "请私聊我。群消息不会执行，避免把 API key 和仓库内容发到群里。"}
 	}
 	ok, reply := s.allow(msg.UserID)
 	if !ok {
-		return reply
+		return Reply{Text: reply}
+	}
+	if msg.Notice != "" {
+		return Reply{Text: msg.Notice}
+	}
+	if msg.File != nil {
+		return s.receiveFile(ctx, msg)
 	}
 	kind, arg := ParseCommand(msg.Text)
 	switch kind {
 	case cmdHelp:
-		return helpText
+		return Reply{Text: helpText}
 	case cmdStatus:
-		return s.status()
+		return Reply{Text: s.status()}
 	case cmdBase:
-		return s.setBase(arg)
+		return Reply{Text: s.setBase(arg)}
 	case cmdKey:
-		return s.setKey(arg)
+		return Reply{Text: s.setKey(arg)}
 	case cmdModel:
-		return s.setModel(arg)
+		return Reply{Text: s.setModel(arg)}
+	case cmdSend:
+		return s.sendLocal(arg)
 	default:
-		return s.forward(ctx, arg)
+		return Reply{Text: s.forward(ctx, msg.ChatID, arg)}
 	}
 }
 
@@ -182,7 +204,7 @@ func (s *Service) setModel(arg string) string {
 	return noteBind(SaveBinding(path, bind), "模型已设置为 "+model+"。下一条对话从新会话开始。")
 }
 
-func (s *Service) forward(ctx context.Context, prompt string) string {
+func (s *Service) forward(ctx context.Context, chatID, prompt string) string {
 	prompt = strings.TrimSpace(prompt)
 	if prompt == "" {
 		return helpText
@@ -196,7 +218,7 @@ func (s *Service) forward(ctx context.Context, prompt string) string {
 	defer s.busy.Store(false)
 
 	_, st := s.snapshot()
-	res, err := s.runner(ctx, prompt, st)
+	res, err := s.runner(withChatID(ctx, chatID), prompt, st)
 	if err != nil {
 		return "pigo 执行失败：" + err.Error()
 	}
@@ -251,5 +273,8 @@ const helpText = `飞书命令（请在私聊里发）：
 /base <url> 或 设置base <url> — 设置模型 API base 地址
 /key <key> 或 设置key <key> — 设置 API key（只保存在本机）
 /model <id> 或 设置模型 <id> — 设置模型 id
+直接说「把某文件发给我」— pigo 会调用工具把文件发到这个聊天
+/send <路径> 或 发送文件 <路径> — 手动把工作目录里的文件发回飞书
+直接发送文件或图片 — 保存到 feishu-inbox/
 状态 — 查看当前设置（不显示完整 key）
 其他文字 — 转发给 pigo，并把回答回传到这里`

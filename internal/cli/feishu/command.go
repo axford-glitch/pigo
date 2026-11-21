@@ -16,6 +16,7 @@ const (
 	cmdBase   = "base"
 	cmdKey    = "key"
 	cmdModel  = "model"
+	cmdSend   = "send"
 	cmdChat   = "chat"
 )
 
@@ -41,6 +42,8 @@ func ParseCommand(text string) (kind, arg string) {
 		return cmdKey, ""
 	case "/model", "设置模型":
 		return cmdModel, ""
+	case "/send", "发送", "发送文件":
+		return cmdSend, ""
 	}
 	prefixes := []struct {
 		prefix string
@@ -63,6 +66,9 @@ func ParseCommand(text string) (kind, arg string) {
 		{"设置key ", cmdKey},
 		{"/model ", cmdModel},
 		{"设置模型 ", cmdModel},
+		{"/send ", cmdSend},
+		{"发送文件 ", cmdSend},
+		{"发送 ", cmdSend},
 	}
 	for _, p := range prefixes {
 		if strings.HasPrefix(lower, p.prefix) {

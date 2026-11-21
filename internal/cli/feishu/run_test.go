@@ -17,7 +17,7 @@ func TestRunQRBindThenForward(t *testing.T) {
 	dir := t.TempDir()
 	var polls int
 	var mu sync.Mutex
-	var on replyFunc
+	var on *Service
 	started := make(chan struct{})
 	deps := bridgeDeps{
 		begin: func() (*feishuauth.BeginResponse, error) {
@@ -48,7 +48,7 @@ func TestRunQRBindThenForward(t *testing.T) {
 		},
 		render: func(content string) (string, error) { return "QR:" + content + "\n", nil },
 		wait:   func(ctx context.Context, d time.Duration) error { return nil },
-		startBot: func(ctx context.Context, appID, secret string, handle replyFunc) (func(), error) {
+		startBot: func(ctx context.Context, appID, secret string, handle *Service) (func(), error) {
 			if appID != "cli_app" || secret != "sec_app" {
 				t.Errorf("bot credentials = %s %s", appID, secret)
 			}
@@ -81,9 +81,9 @@ func TestRunQRBindThenForward(t *testing.T) {
 	mu.Lock()
 	handle := on
 	mu.Unlock()
-	base := handle(context.Background(), feishuconnector.Message{ChatType: feishuconnector.ChatDM, UserID: "ou_owner", Text: "/base https://api.example.com/v1"})
-	key := handle(context.Background(), feishuconnector.Message{ChatType: feishuconnector.ChatDM, UserID: "ou_owner", Text: "设置key sk-test-9999"})
-	chat := handle(context.Background(), feishuconnector.Message{ChatType: feishuconnector.ChatDM, UserID: "ou_owner", Text: "你好"})
+	base := handle.Handle(context.Background(), feishuconnector.Message{ChatType: feishuconnector.ChatDM, UserID: "ou_owner", Text: "/base https://api.example.com/v1"}).Text
+	key := handle.Handle(context.Background(), feishuconnector.Message{ChatType: feishuconnector.ChatDM, UserID: "ou_owner", Text: "设置key sk-test-9999"}).Text
+	chat := handle.Handle(context.Background(), feishuconnector.Message{ChatType: feishuconnector.ChatDM, UserID: "ou_owner", Text: "你好"}).Text
 	cancel()
 	if code := <-codeCh; code != 0 {
 		t.Fatalf("exit %d stderr=%s", code, errOut.String())
@@ -129,7 +129,7 @@ func TestRunUsesSavedBinding(t *testing.T) {
 		poll:   func(string) (*feishuauth.PollResponse, error) { return nil, os.ErrClosed },
 		render: func(string) (string, error) { return "", nil },
 		wait:   func(context.Context, time.Duration) error { return nil },
-		startBot: func(ctx context.Context, appID, secret string, on replyFunc) (func(), error) {
+		startBot: func(ctx context.Context, appID, secret string, on *Service) (func(), error) {
 			if appID != "saved" || secret != "saved-sec" {
 				t.Errorf("credentials = %s %s", appID, secret)
 			}

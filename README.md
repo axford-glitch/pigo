@@ -363,10 +363,13 @@ pigo --feishu
 | `/base https://api.example.com/v1` 或 `设置base https://api.example.com/v1` | 保存模型 API base 地址。还没指定协议时按 OpenAI 兼容协议 |
 | `/key sk-...` 或 `设置key sk-...` | 把 API key 写进本机 `0600` 凭据文件，配置里只留引用名 `feishu` |
 | `/model <id>` 或 `设置模型 <id>` | 设置模型 id |
+| 直接发文件或图片 | 下载到当前目录的 `feishu-inbox/`（只取文件名，不跟随消息里的路径） |
+| 说「把某文件发给我」 | pigo 调用 `feishu_send_file`，把工作目录里的文件直接发到这个聊天 |
+| `/send <路径>` 或 `发送文件 <路径>` | 手动把工作目录里的文件发回飞书 |
 | `状态` | 查看当前设置（不回传完整 key） |
 | 其他文字 | 转发给 pigo，并把回答回传到飞书。同一会话会续聊 |
 
-群消息不会执行。绑定保存在 `$PIGO_HOME/feishu.json`（默认 `~/.pigo/feishu.json`）。`--feishu-rebind` 重新扫码。
+群消息不会执行。飞书发来的文件和图片会下载到启动目录下的 `feishu-inbox/`。pigo 在对话里可以用 `feishu_send_file` 把工作目录中的文件直接发回飞书；`/send` 是同一条限制下的手动入口。工作目录外的路径和指向目录外的符号链接会被拒绝。绑定保存在 `$PIGO_HOME/feishu.json`（默认 `~/.pigo/feishu.json`）。`--feishu-rebind` 重新扫码。
 
 ### GitHub PR Review Webhook
 

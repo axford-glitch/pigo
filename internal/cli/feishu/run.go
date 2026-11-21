@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -20,15 +21,12 @@ import (
 	"github.com/smallnest/pigo/internal/remotecontrol"
 )
 
-// replyFunc produces the text to send back for one inbound message.
-type replyFunc func(ctx context.Context, msg feishuconnector.Message) string
-
 type bridgeDeps struct {
 	begin    func() (*feishuauth.BeginResponse, error)
 	poll     func(deviceCode string) (*feishuauth.PollResponse, error)
 	render   func(content string) (string, error)
 	wait     func(ctx context.Context, d time.Duration) error
-	startBot func(ctx context.Context, appID, secret string, on replyFunc) (stop func(), err error)
+	startBot func(ctx context.Context, appID, secret string, svc *Service) (stop func(), err error)
 	runner   PromptRunner
 }
 
@@ -47,7 +45,7 @@ func realDeps() bridgeDeps {
 		poll:   feishuauth.Poll,
 		render: remotecontrol.Render,
 		wait:   waitCtx,
-		startBot: func(ctx context.Context, appID, secret string, on replyFunc) (func(), error) {
+		startBot: func(ctx context.Context, appID, secret string, svc *Service) (func(), error) {
 			bot, err := feishuconnector.New(feishuconnector.Config{
 				AppID:          appID,
 				AppSecret:      secret,
@@ -57,10 +55,30 @@ func realDeps() bridgeDeps {
 			if err != nil {
 				return nil, err
 			}
+			svc.fetch = func(ctx context.Context, messageID, fileKey, kind string) ([]byte, string, error) {
+				return bot.DownloadResource(ctx, messageID, fileKey, kind)
+			}
+			svc.sendFile = func(ctx context.Context, chatID, path string) error {
+				_, err := bot.Send(ctx, feishuconnector.Outbound{
+					ChatID:      chatID,
+					Attachments: []feishuconnector.Attachment{{Path: path}},
+				})
+				return err
+			}
 			bot.OnMessage(func(ctx context.Context, msg feishuconnector.Message) {
-				reply := on(ctx, msg)
-				if _, err := bot.SendText(ctx, msg.ChatID, reply); err != nil {
-					fmt.Fprintf(os.Stderr, "pigo: feishu send: %v\n", err)
+				reply := svc.Handle(ctx, msg)
+				if strings.TrimSpace(reply.Text) != "" {
+					if _, err := bot.SendText(ctx, msg.ChatID, reply.Text); err != nil {
+						fmt.Fprintf(os.Stderr, "pigo: feishu send: %v\n", err)
+					}
+				}
+				for _, path := range reply.Files {
+					if _, err := bot.Send(ctx, feishuconnector.Outbound{
+						ChatID:      msg.ChatID,
+						Attachments: []feishuconnector.Attachment{{Path: path}},
+					}); err != nil {
+						fmt.Fprintf(os.Stderr, "pigo: feishu file: %v\n", err)
+					}
 				}
 			})
 			if err := bot.Start(ctx); err != nil {
@@ -117,21 +135,23 @@ func serve(ctx context.Context, opt Options, out, errOut io.Writer, d bridgeDeps
 			SessionID: bind.SessionID,
 		},
 		store: fileStore{configPath: opt.ConfigPath, credPath: opt.CredPath},
+		cwd:   opt.Cwd,
+		inbox: opt.InboxDir,
 	}
 	if d.runner != nil {
 		svc.runner = d.runner
 	} else {
 		svc.runner = func(ctx context.Context, prompt string, st Settings) (PromptResult, error) {
-			return runPrompt(ctx, opt, prompt, st)
+			return runPrompt(ctx, opt, prompt, st, svc.sendFile)
 		}
 	}
-	stopBot, err := d.startBot(ctx, bind.AppID, bind.AppSecret, svc.Handle)
+	stopBot, err := d.startBot(ctx, bind.AppID, bind.AppSecret, svc)
 	if err != nil {
 		fmt.Fprintf(errOut, "pigo: feishu: %v\n", err)
 		return 1
 	}
 	defer stopBot()
-	fmt.Fprintln(out, "飞书已连接。私聊机器人可以设置 API base、API key，或直接把对话转发给 pigo。Ctrl+C 退出。")
+	fmt.Fprintln(out, "飞书已连接。私聊可以设置 API base、API key，收发文件，或把对话转发给 pigo。Ctrl+C 退出。")
 	<-ctx.Done()
 	return 0
 }
