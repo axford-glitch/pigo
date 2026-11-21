@@ -1,0 +1,13 @@
+{
+	"admin/services/pigo": {
+		"title": "Pigo",
+		"order": 90,
+		"action": {
+			"type": "view",
+			"path": "pigo/feishu"
+		},
+		"depends": {
+			"acl": [ "luci-app-pigo" ]
+		}
+	}
+}

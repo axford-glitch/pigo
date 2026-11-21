@@ -62,6 +62,13 @@ type Service struct {
 	busy atomic.Bool
 }
 
+// setBinding replaces the Feishu app the running process accepts messages for.
+func (s *Service) setBinding(b Binding) {
+	s.mu.Lock()
+	s.bind = b
+	s.mu.Unlock()
+}
+
 func (s *Service) snapshot() (Binding, Settings) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
